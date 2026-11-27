@@ -1,9 +1,11 @@
 import argparse
 import json
+import os
 import sys
 import time
 
 from . import __version__
+from . import helper
 from .device import (AccessError, BusyError, Disconnected, LarkError, NotFound,
                      ReadTimeout, Receiver, devices)
 from .protocol import ProtocolError, STATUS_COMMAND
@@ -101,8 +103,10 @@ def _doctor():
     if not entries:
         print("Receiver: absent. Plug in the LARK A2 USB-C receiver (3547:0411).")
         return EXIT_NOT_FOUND
-    print(f"Receiver: {len(entries)} HID interface(s) found; vendor pages: " +
+    print(f"Receiver: {len(entries)} HID interface(s) found; usage pages: " +
           ", ".join(f"0x{e.get('usage_page', 0):04x}" for e in entries))
+    if not any(e.get("usage_page") in (0xFF90, 0xFF82) for e in entries):
+        print("No separate vendor collection is exposed; the receiver's control reports may use its Generic Desktop interface.")
     try:
         with Receiver() as receiver:
             status = receiver.status()
@@ -113,7 +117,10 @@ def _doctor():
         return 0
     except (LarkError, ProtocolError) as exc:
         print(f"HID status read: {exc}")
-        print("On macOS, enable Input Monitoring for your terminal in System Settings → Privacy & Security, then restart it. Close other receiver controllers and reconnect USB if needed.")
+        if os.environ.get("LARK_IN_HELPER") == "1":
+            print("In System Settings → Privacy & Security → Input Monitoring, enable Lark Helper or add ~/Applications/Lark Helper.app with the + button. Leave terminal apps disabled. Also close other receiver controllers and reconnect USB if needed.")
+        else:
+            print("Close other receiver controllers and reconnect USB if needed. If access still fails only in terminals without Input Monitoring, install the Lark helper app to isolate that permission.")
         return _exit_code(exc)
 
 
@@ -181,6 +188,9 @@ def run(args):
 def main(argv=None):
     args = parser().parse_args(argv)
     try:
+        if args.command != "devices" and helper.available():
+            forwarded = list(sys.argv[1:] if argv is None else argv)
+            return helper.run(forwarded, watch=args.command == "battery" and args.watch)
         return run(args)
     except KeyboardInterrupt:
         print(file=sys.stderr)

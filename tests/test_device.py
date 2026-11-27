@@ -13,6 +13,9 @@ class FakeDevice:
     def open_path(self, path):
         self.path = path
 
+    def open(self, vid, pid):
+        self.opened_ids = (vid, pid)
+
     def write(self, packet):
         self.last_write = packet
         return len(packet)
@@ -39,10 +42,34 @@ class FakeHid:
         return self.dev
 
 
+class GenericDesktopOnlyHid(FakeHid):
+    def enumerate(self, vid, pid):
+        return [{"path": b"generic", "usage_page": 1}]
+
+
+class PathOpenFails(FakeDevice):
+    def open_path(self, path):
+        raise OSError("open failed")
+
+
 class DeviceTests(unittest.TestCase):
     def test_duplicate_interfaces(self):
         with patch("lark.device._hid", return_value=FakeHid(FakeDevice())):
             self.assertEqual(len(devices()), 2)
+
+    def test_generic_desktop_only_receiver(self):
+        dev = FakeDevice()
+        with patch("lark.device._hid", return_value=GenericDesktopOnlyHid(dev)):
+            with Receiver() as receiver:
+                self.assertEqual(receiver.status().microphones[0].battery, 76)
+                self.assertEqual(dev.path, b"generic")
+
+    def test_single_interface_uses_verified_open_fallback(self):
+        dev = PathOpenFails()
+        with patch("lark.device._hid", return_value=GenericDesktopOnlyHid(dev)):
+            with Receiver() as receiver:
+                self.assertEqual(receiver.status().microphones[0].battery, 76)
+        self.assertEqual(dev.opened_ids, (0x3547, 0x0411))
 
     def test_status_and_close(self):
         dev = FakeDevice()

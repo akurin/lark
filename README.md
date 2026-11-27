@@ -14,6 +14,19 @@ lark battery
 
 The idempotent installer creates `.venv`, installs `hidapi` if needed, installs the CLI entry point, and links `~/.local/bin/lark` to the virtual environment. It can reuse an existing virtual environment with `hidapi` already installed, without downloading a build backend. It reports if `~/.local/bin` is absent from `PATH` and never edits shell startup files. Run `./scripts/uninstall.sh` to remove this project's link and virtual environment.
 
+### Keep Input Monitoring off your terminal
+
+Some A2 receivers enumerate on macOS as a single Generic Desktop HID interface. If macOS denies direct access from your terminal, build the optional short-lived helper app **on the Mac**:
+
+```sh
+./scripts/install-helper.sh
+lark doctor
+```
+
+The script uses Apple's `swiftc` and `codesign` command-line tools to install `~/Applications/Lark Helper.app`. Each CLI request registers a temporary user LaunchAgent, starts the app through `launchd`, and unregisters the job when done. The helper has no GUI and exits after the command. `battery --watch` keeps it alive only while watching. It starts the existing Python toolkit with a small allowlist of commands and returns stdout, stderr, and the exit code through a private temporary directory. No sudo or persistent daemon is needed. `lark devices` remains a direct enumeration command.
+
+In System Settings → Privacy & Security → Input Monitoring, enable **Lark Helper**. If it is absent and the panel offers a `+` button, add `~/Applications/Lark Helper.app` manually, then retry. Keep Ghostty and Kitty ungranted. Closing a permission dialog can suppress further prompts; Apple's targeted reset is `tccutil reset ListenEvent com.akurin.lark.helper` (no sudo), which clears only this app's Input Monitoring decision. If a prompt names a terminal, do not grant it; report that attribution result. The helper routes commands automatically when installed; set `LARK_DIRECT=1` for direct-access diagnostics. Rebuilding a signed app can require a new macOS permission grant, so the helper installer skips unchanged builds. The uninstall script removes this project's helper app too. The LaunchAgent's permission attribution requires validation on your Mac; the Linux test runner cannot check macOS TCC behavior.
+
 ## Commands
 
 | Command | Result | Evidence |
@@ -39,7 +52,7 @@ The JSON command emits data on stdout and errors on stderr. Exit codes: `0` succ
 
 ## Troubleshooting
 
-If `lark doctor` sees the receiver but cannot read it, grant **Input Monitoring** to the terminal app in **System Settings → Privacy & Security**, then restart the terminal. The receiver also exposes a keyboard HID interface. Close HollyAudio and other receiver controllers if the device is busy. Unplug and replug after a disconnect. Power on and pair a transmitter if both microphones show disconnected. No sudo is needed.
+If `lark doctor` sees the receiver but cannot read it, macOS may require **Input Monitoring** for the responsible app. The CLI prefers vendor HID collections `0xFF90` and `0xFF82`, but some Macs enumerate only a Generic Desktop collection for this receiver. It tries the enumerated path and, for a single-interface receiver, the same `open(VID, PID)` call as the verified hardware probe. Either may require Input Monitoring for the terminal when running directly. Install the optional helper above to keep that permission off general-purpose terminals. Close HollyAudio and other receiver controllers if the device is busy. Unplug and replug after a disconnect. Power on and pair a transmitter if both microphones show disconnected. No sudo is needed.
 
 ## Protocol and source attribution
 

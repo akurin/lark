@@ -10,4 +10,9 @@ fi
 if [[ -d "$venv_dir" ]]; then
     rm -rf "$venv_dir"
 fi
+helper_app="$HOME/Applications/Lark Helper.app"
+helper_marker="$helper_app/Contents/Resources/lark-build-id"
+if [[ -f "$helper_marker" && "$(cat "$helper_marker")" == *":$venv_dir/bin/python" ]]; then
+    rm -rf "$helper_app"
+fi
 echo "Removed this project's CLI link and virtual environment."

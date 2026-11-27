@@ -54,6 +54,11 @@ class CliTests(unittest.TestCase):
             self.assertIn("Noise cancellation: Off", self.call(["nc", "status"])[1])
             self.assertIn("Mic 1: No", self.call(["charging", "status"])[1])
 
+    def test_helper_routing(self):
+        with patch("lark.cli.helper.available", return_value=True), patch("lark.cli.helper.run", return_value=7) as helper_run:
+            self.assertEqual(self.call(["battery", "--watch"])[0], 7)
+        helper_run.assert_called_once_with(["battery", "--watch"], watch=True)
+
 
 if __name__ == "__main__":
     unittest.main()
