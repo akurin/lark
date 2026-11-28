@@ -14,19 +14,15 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-go@v6
         with:
-          python-version: '3.13'
+          go-version-file: go.mod
 
-      - name: Install CLI and run tests
+      - name: Test and install
         run: |
-          bash -n scripts/install.sh scripts/install-helper.sh scripts/uninstall.sh
+          bash -n scripts/install.sh scripts/uninstall.sh
+          go test ./...
           ./scripts/install.sh
-          .venv/bin/python -m unittest discover -s tests -v
-          (cd /tmp && "$HOME/.local/bin/lark" --help)
-
-      - name: Build and verify macOS helper
-        run: |
-          ./scripts/install-helper.sh
-          ./scripts/install-helper.sh
+          ./scripts/install.sh
           codesign --verify --deep --strict "$HOME/Applications/Lark Helper.app"
+          (cd /tmp && "$HOME/.local/bin/lark" --help)

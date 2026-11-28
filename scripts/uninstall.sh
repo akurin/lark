@@ -2,17 +2,15 @@
 set -euo pipefail
 
 project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-venv_dir="$project_dir/.venv"
+binary="$project_dir/build/lark"
 link_path="$HOME/.local/bin/lark"
-if [[ -L "$link_path" && "$(readlink "$link_path")" == "$venv_dir/bin/lark" ]]; then
+if [[ -L "$link_path" && "$(readlink "$link_path")" == "$binary" ]]; then
     rm "$link_path"
 fi
-if [[ -d "$venv_dir" ]]; then
-    rm -rf "$venv_dir"
+app_dir="$HOME/Applications/Lark Helper.app"
+marker="$app_dir/Contents/Resources/lark-build-id"
+if [[ -f "$marker" && "$(cat "$marker")" == go:"$project_dir":* ]]; then
+    rm -rf "$app_dir"
 fi
-helper_app="$HOME/Applications/Lark Helper.app"
-helper_marker="$helper_app/Contents/Resources/lark-build-id"
-if [[ -f "$helper_marker" && "$(cat "$helper_marker")" == *":$venv_dir/bin/python" ]]; then
-    rm -rf "$helper_app"
-fi
-echo "Removed this project's CLI link and virtual environment."
+rm -f "$binary"
+echo "Removed this project's Go CLI and helper."

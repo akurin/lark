@@ -1,63 +1,58 @@
 # LARK A2 CLI
 
-Lightweight Python 3 command-line access to the Hollyland LARK A2 USB-C receiver using hidapi. No daemon, audio capture, HollyAudio dependency, or sudo. Intended for Apple Silicon macOS and receiver USB ID `3547:0411`.
+A short-lived Go command-line toolkit for the Hollyland LARK A2 USB-C receiver (`3547:0411`) on Apple Silicon macOS. It uses [go-hid](https://github.com/sstallion/go-hid), a cgo binding to HIDAPI. It needs no Python runtime, Swift runtime, HollyAudio app, sudo, or persistent daemon.
 
 ## Install
 
-On the **Mac host**, from this directory:
+Install Go and Xcode Command Line Tools on the Mac, then run from this repository:
 
 ```sh
+go test ./...
 ./scripts/install.sh
 lark doctor
 lark battery
+lark battery --json
 ```
 
-The idempotent installer creates `.venv`, installs `hidapi` if needed, installs the CLI entry point, and links `~/.local/bin/lark` to the virtual environment. It can reuse an existing virtual environment with `hidapi` already installed, without downloading a build backend. It reports if `~/.local/bin` is absent from `PATH` and never edits shell startup files. Run `./scripts/uninstall.sh` to remove this project's link and virtual environment.
+The idempotent installer builds `build/lark`, installs an ad hoc signed `~/Applications/Lark Helper.app`, and links `~/.local/bin/lark` to the binary. It reports if `~/.local/bin` is missing from `PATH` and never changes shell startup files. It can replace this project's previous Python CLI link and helper app. Run `./scripts/uninstall.sh` to remove the Go CLI link, binary, and app. An old Python virtual environment, if present, can be removed separately after verification.
 
-### Keep Input Monitoring off your terminal
+### Input Monitoring
 
-Some A2 receivers enumerate on macOS as a single Generic Desktop HID interface. If macOS denies direct access from your terminal, build the optional short-lived helper app **on the Mac**:
+The terminal command registers a temporary user LaunchAgent, starts the same Go executable inside `Lark Helper.app`, and reads its output from a private temporary directory. The app talks to HID directly and exits after the command. `battery --watch` keeps it alive only while watching. `lark devices` only enumerates interfaces and runs directly. No background daemon remains after a command.
 
-```sh
-./scripts/install-helper.sh
-lark doctor
-```
-
-The script uses Apple's `swiftc` and `codesign` command-line tools to install `~/Applications/Lark Helper.app`. Each CLI request registers a temporary user LaunchAgent, starts the app through `launchd`, and unregisters the job when done. The helper has no GUI and exits after the command. `battery --watch` keeps it alive only while watching. It starts the existing Python toolkit with a small allowlist of commands and returns stdout, stderr, and the exit code through a private temporary directory. No sudo or persistent daemon is needed. `lark devices` remains a direct enumeration command.
-
-In System Settings → Privacy & Security → Input Monitoring, enable **Lark Helper**. If it is absent and the panel offers a `+` button, add `~/Applications/Lark Helper.app` manually, then retry. Keep Ghostty and Kitty ungranted. Closing a permission dialog can suppress further prompts; Apple's targeted reset is `tccutil reset ListenEvent com.akurin.lark.helper` (no sudo), which clears only this app's Input Monitoring decision. If a prompt names a terminal, do not grant it; report that attribution result. The helper routes commands automatically when installed; set `LARK_DIRECT=1` for direct-access diagnostics. Rebuilding a signed app can require a new macOS permission grant, so the helper installer skips unchanged builds. The uninstall script removes this project's helper app too. The LaunchAgent's permission attribution requires validation on your Mac; the Linux test runner cannot check macOS TCC behavior.
+In System Settings → Privacy & Security → Input Monitoring, grant access to **Lark Helper**. You can leave Ghostty and Kitty ungranted. If no permission prompt appears, add `~/Applications/Lark Helper.app` with the `+` button. A closed or denied dialog can be reset with `tccutil reset ListenEvent com.akurin.lark.helper`, then relaunch the command. A rebuild may require a fresh grant because the ad hoc signature changes with the executable. Set `LARK_DIRECT=1` only when intentionally testing direct terminal HID access.
 
 ## Commands
 
 | Command | Result | Evidence |
 | --- | --- | --- |
-| `lark battery`, `lark status` | Batteries, connection, and additional state | Battery and connection hardware captured; other status fields from upstream |
+| `lark battery`, `lark status` | Batteries, connection, and additional state | Battery and connection hardware captured; other fields from upstream |
 | `lark battery --json` | Scriptable JSON object | Hardware captured battery format |
 | `lark battery --watch --interval 5` | Poll until Ctrl+C; JSON mode emits one object per line | Same status request |
-| `lark devices`, `lark doctor` | Enumerate interfaces and diagnose access | Local HID API |
+| `lark devices`, `lark doctor` | Enumerate interfaces and diagnose access | HIDAPI |
 | `lark raw` | Hex status payload; read-only | Hardware captured status command |
 | `lark info`, `lark firmware` | Receiver identity and firmware | Firmware command from upstream source |
 | `lark nc status`, `lark mute status`, `lark charging status` | Read-only states | Field positions from upstream source |
 | `lark nc on`, `lark nc off`, `lark nc level 2` | Set noise cancellation and check reported state | Write packets tested by upstream on its receiver; **not tested on this receiver** |
 
-`nc level` accepts 1, 2, or 3. The switch is a toggle in the protocol, so the CLI first reads current state and confirms changes with another read. Avoid simultaneous controllers. Firmware **updates** and other undocumented writes are not implemented. `raw` sends only the known status request; it does not accept arbitrary write packets.
+`nc level` accepts 1, 2, or 3. The noise switch is a toggle, so the CLI reads the current state and confirms changes with another read. Firmware updates and undocumented writes are not implemented. `raw` sends only the known status request.
 
-JSON example:
+Example JSON:
 
 ```json
 {"receiver_connected":true,"microphones":[{"id":1,"connected":true,"battery":76},{"id":2,"connected":false,"battery":null}]}
 ```
 
-The JSON command emits data on stdout and errors on stderr. Exit codes: `0` success, `2` receiver absent or invalid arguments, `3` HID permission denied, `4` other HID I/O or unconfirmed control, `5` invalid response, `6` timeout, `130` interrupted. A connected microphone with an invalid battery byte reports `null` / `Unknown`.
+JSON data goes to stdout and diagnostics to stderr. Exit codes: `0` success, `2` receiver absent or invalid arguments, `3` HID permission denied, `4` other HID I/O or unconfirmed control, `5` invalid response, `6` timeout, `130` interrupted. A connected microphone with an invalid battery byte reports `null` / `Unknown`.
 
 ## Troubleshooting
 
-If `lark doctor` sees the receiver but cannot read it, macOS may require **Input Monitoring** for the responsible app. The CLI prefers vendor HID collections `0xFF90` and `0xFF82`, but some Macs enumerate only a Generic Desktop collection for this receiver. It tries the enumerated path and, for a single-interface receiver, the same `open(VID, PID)` call as the verified hardware probe. Either may require Input Monitoring for the terminal when running directly. Install the optional helper above to keep that permission off general-purpose terminals. Close HollyAudio and other receiver controllers if the device is busy. Unplug and replug after a disconnect. Power on and pair a transmitter if both microphones show disconnected. No sudo is needed.
+If `lark doctor` sees the receiver but cannot read it, check Input Monitoring for Lark Helper, close other receiver controllers, and reconnect USB. Some receivers expose only a Generic Desktop HID collection. The CLI tries the enumerated path and, for a single interface, the verified vendor/product open method. If both microphones show disconnected, power on and pair a transmitter. No sudo is needed.
 
-## Protocol and source attribution
+## Protocol and testing
 
-Status framing, command `0x10`, and battery offsets were verified with the user's physical receiver. The captured 16-byte payload is `01 00 4c 00 00 00 00 05 00 00 00 00 00 00 04 00` and decodes to Mic 1 at 76%, Mic 2 disconnected. Firmware command `0x41`, noise byte 6, mute/charging bits in byte 15, and noise commands `0x19` and `0x06` were derived from [LARK Flow Bridge protocol notes](https://github.com/geekyshubham/lark-flow-bridge/blob/main/docs/HOW_IT_WORKS.md) and [Swift implementation](https://github.com/geekyshubham/lark-flow-bridge/blob/main/LARKFlowBridge.swift). The captured `0x04` is in byte 14, so it does **not** confirm the upstream charging bit at byte 15. That project is MIT licensed. This package uses its documented packet facts and an independent Python implementation; no upstream source was copied.
+Status framing, command `0x10`, and battery offsets were verified with the physical receiver using the earlier Python probe. The captured 16-byte payload is `01 00 4c 00 00 00 00 05 00 00 00 00 00 00 04 00`; it means Mic 1 is at 76% and Mic 2 is disconnected. Go decoding is tested against that captured packet and mocked HID devices. Live Go HID access and macOS permission attribution require a Mac with the receiver.
 
-Run tests with `python3 -m unittest discover -s tests -v` after installing, or `.venv/bin/python -m unittest discover -s tests -v`.
+Firmware command `0x41`, noise byte 6, mute/charging bits in byte 15, and noise commands `0x19` and `0x06` come from [LARK Flow Bridge protocol notes](https://github.com/geekyshubham/lark-flow-bridge/blob/main/docs/HOW_IT_WORKS.md) and [Swift implementation](https://github.com/geekyshubham/lark-flow-bridge/blob/main/LARKFlowBridge.swift). The captured `0x04` is in byte 14 and does not confirm the upstream charging bit at byte 15. The upstream project is MIT licensed; this is an independent Go implementation of its documented packet facts. The Go HID binding is BSD-2-Clause licensed.
 
-GitHub Actions runs these tests and builds/signs the optional helper on an Apple Silicon macOS runner. CI has no physical receiver or Input Monitoring grant, so it cannot verify live HID access or macOS permission attribution.
+Run mocked tests with `go test ./...`. GitHub Actions runs the tests and builds/signs the app on an Apple Silicon macOS runner. CI has no physical receiver or Input Monitoring grant.
