@@ -6,28 +6,28 @@ import (
 )
 
 const (
-	reportID = 0x55
-	reportSize = 64
-	statusCommand = 0x10
+	reportID        = 0x55
+	reportSize      = 64
+	statusCommand   = 0x10
 	firmwareCommand = 0x41
 )
 
 type microphone struct {
-	ID int `json:"id"`
-	Connected bool `json:"connected"`
-	Battery *int `json:"battery"`
-	Muted *bool `json:"-"`
-	Charging *bool `json:"-"`
+	ID        int   `json:"id"`
+	Connected bool  `json:"connected"`
+	Battery   *int  `json:"battery"`
+	Muted     *bool `json:"-"`
+	Charging  *bool `json:"-"`
 }
 
 type status struct {
 	Microphones [2]microphone `json:"microphones"`
-	NoiseLevel *int `json:"-"`
+	NoiseLevel  *int          `json:"-"`
 }
 
 type batteryJSON struct {
-	ReceiverConnected bool `json:"receiver_connected"`
-	Microphones [2]microphone `json:"microphones"`
+	ReceiverConnected bool          `json:"receiver_connected"`
+	Microphones       [2]microphone `json:"microphones"`
 }
 
 func (s status) batteryJSON() batteryJSON {
@@ -58,7 +58,7 @@ func parseResponse(data []byte, command byte) ([]byte, error) {
 	if len(data) < 6+length {
 		return nil, fmt.Errorf("truncated response payload: expected %d bytes", length)
 	}
-	return data[6:6+length], nil
+	return data[6 : 6+length], nil
 }
 
 func decodeStatus(payload []byte) (status, error) {
@@ -70,7 +70,7 @@ func decodeStatus(payload []byte) (status, error) {
 		if payload[i] != 0 && payload[i] != 1 {
 			return result, fmt.Errorf("invalid Mic %d connection flag", i+1)
 		}
-		m := microphone{ID: i+1, Connected: payload[i] == 1}
+		m := microphone{ID: i + 1, Connected: payload[i] == 1}
 		if m.Connected {
 			if payload[i+2] <= 100 {
 				value := int(payload[i+2])

@@ -1,6 +1,6 @@
 # LARK A2 CLI
 
-A short-lived Go command-line toolkit for the Hollyland LARK A2 USB-C receiver (`3547:0411`) on Apple Silicon macOS. It uses [go-hid](https://github.com/sstallion/go-hid), a cgo binding to HIDAPI. It needs no Python runtime, Swift runtime, HollyAudio app, sudo, or persistent daemon.
+A short-lived Go command-line toolkit for the Hollyland LARK A2 USB-C receiver (`3547:0411`) on Apple Silicon macOS. It uses [go-hid](https://github.com/sstallion/go-hid), a cgo binding to HIDAPI, and [Cobra](https://github.com/spf13/cobra) for commands and help. It needs no Python runtime, Swift runtime, HollyAudio app, sudo, or persistent daemon.
 
 ## Install
 
@@ -32,10 +32,34 @@ In System Settings → Privacy & Security → Input Monitoring, grant access to 
 | `lark devices`, `lark doctor` | Enumerate interfaces and diagnose access | HIDAPI |
 | `lark raw` | Hex status payload; read-only | Hardware captured status command |
 | `lark info`, `lark firmware` | Receiver identity and firmware | Firmware command from upstream source |
-| `lark nc status`, `lark mute status`, `lark charging status` | Read-only states | Field positions from upstream source |
+| `lark nc`, `lark mute`, `lark charging` | Read-only states; `status` is optional | Field positions from upstream source |
 | `lark nc on`, `lark nc off`, `lark nc level 2` | Set noise cancellation and check reported state | Write packets tested by upstream on its receiver; **not tested on this receiver** |
 
 `nc level` accepts 1, 2, or 3. The noise switch is a toggle, so the CLI reads the current state and confirms changes with another read. Firmware updates and undocumented writes are not implemented. `raw` sends only the known status request.
+
+Run `lark --help` for the command list, or `lark help nc` / `lark nc --help` for command-specific usage. Cobra also provides `lark completion` for shell completions.
+
+### Zsh completion
+
+Generate a completion file once after installing the CLI:
+
+```zsh
+mkdir -p "$HOME/.zsh/completions"
+lark completion zsh > "$HOME/.zsh/completions/_lark"
+```
+
+Add this block at the end of `~/.zshrc`. It initializes completion only if your existing zsh setup has not already done so, then loads the generated file:
+
+```zsh
+# Lark command completion
+if (( ! $+functions[compdef] )); then
+  autoload -Uz compinit
+  compinit
+fi
+source "$HOME/.zsh/completions/_lark"
+```
+
+Open a new zsh session and type `lark nc ` followed by Tab to check it. Regenerate `_lark` after upgrading the CLI if its completion behavior changes. The installer leaves `~/.zshrc` untouched.
 
 Example JSON:
 
@@ -53,6 +77,6 @@ If `lark doctor` sees the receiver but cannot read it, check Input Monitoring fo
 
 Status framing, command `0x10`, and battery offsets were verified with the physical receiver using the earlier Python probe. The captured 16-byte payload is `01 00 4c 00 00 00 00 05 00 00 00 00 00 00 04 00`; it means Mic 1 is at 76% and Mic 2 is disconnected. Go decoding is tested against that captured packet and mocked HID devices. Live Go HID access and macOS permission attribution require a Mac with the receiver.
 
-Firmware command `0x41`, noise byte 6, mute/charging bits in byte 15, and noise commands `0x19` and `0x06` come from [LARK Flow Bridge protocol notes](https://github.com/geekyshubham/lark-flow-bridge/blob/main/docs/HOW_IT_WORKS.md) and [Swift implementation](https://github.com/geekyshubham/lark-flow-bridge/blob/main/LARKFlowBridge.swift). The captured `0x04` is in byte 14 and does not confirm the upstream charging bit at byte 15. The upstream project is MIT licensed; this is an independent Go implementation of its documented packet facts. The Go HID binding is BSD-2-Clause licensed.
+Firmware command `0x41`, noise byte 6, mute/charging bits in byte 15, and noise commands `0x19` and `0x06` come from [LARK Flow Bridge protocol notes](https://github.com/geekyshubham/lark-flow-bridge/blob/main/docs/HOW_IT_WORKS.md) and [Swift implementation](https://github.com/geekyshubham/lark-flow-bridge/blob/main/LARKFlowBridge.swift). The captured `0x04` is in byte 14 and does not confirm the upstream charging bit at byte 15. The upstream project is MIT licensed; this is an independent Go implementation of its documented packet facts. The Go HID binding is BSD-2-Clause licensed; Cobra is Apache-2.0 licensed.
 
 Run mocked tests with `go test ./...`. GitHub Actions runs the tests and builds/signs the app on an Apple Silicon macOS runner. CI has no physical receiver or Input Monitoring grant.
